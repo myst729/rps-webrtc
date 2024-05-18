@@ -3,7 +3,7 @@ import { Peer } from 'peerjs'
 import { onMounted, computed, ref, h } from 'vue'
 import { NButton, NIcon, NInput, NCollapseTransition, NSpace, useDialog, useMessage } from 'naive-ui'
 import { Copy } from '@vicons/ionicons5'
-import GamePlay from './GamePlay.vue'
+import GamePlay from '@/components/GamePlay.vue'
 
 const PEER_STATE = {
   UNAVAILABLE: 'UNAVAILABLE',

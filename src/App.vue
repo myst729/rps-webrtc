@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { NConfigProvider, NDialogProvider, NMessageProvider, useOsTheme, darkTheme } from 'naive-ui'
-import GamePanel from './components/GamePanel.vue'
+import GamePanel from '@/components/GamePanel.vue'
 
 const osTheme = useOsTheme()
 const theme = computed(() => (osTheme.value === 'dark' ? darkTheme : null))

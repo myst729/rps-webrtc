@@ -3,9 +3,9 @@ import { defineEmits, defineExpose, defineProps, computed, ref } from 'vue'
 import { NIcon, NSpace } from 'naive-ui'
 import { HourglassOutline, BulbOutline } from '@vicons/ionicons5'
 
-import rock from '../assets/rock.png'
-import paper from '../assets/paper.png'
-import scissors from '../assets/scissors.png'
+import rock from '@/assets/rock.png'
+import paper from '@/assets/paper.png'
+import scissors from '@/assets/scissors.png'
 
 const results = ['draw', 'win', 'lose']
 const options = {
