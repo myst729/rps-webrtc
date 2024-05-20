@@ -83,7 +83,7 @@ defineExpose({ reset })
       />
     </div>
 
-    <n-space :size="16" justify="center" align="center" :class="{ 'options-field': true, waiting }">
+    <n-space :size="20" justify="center" align="center" :class="{ 'options-field': true, waiting }">
       <img
         v-for="(option, key) in options"
         draggable="false"
@@ -147,8 +147,8 @@ defineExpose({ reset })
 
 .option {
   padding: 8px;
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   background-color: rgba(200, 200, 200, .25);
   border: 4px solid rgba(255, 255, 255, .25);
   border-radius: 20px;
