@@ -24,18 +24,25 @@ a {
 }
 
 h1 {
-  font-size: 2em;
+  font-size: 1.6em;
   line-height: 1.1;
 }
 
 #app {
   max-width: 800px;
   margin: 0 auto;
-  padding: 1rem 3rem;
+  padding: 1rem 2rem;
 }
 
 .centered {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
 }

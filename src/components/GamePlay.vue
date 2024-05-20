@@ -1,6 +1,6 @@
 <script setup>
 import { defineEmits, defineExpose, defineProps, computed, ref } from 'vue'
-import { NIcon, NSpace } from 'naive-ui'
+import { NIcon, NSpace, NTag } from 'naive-ui'
 import { HourglassOutline, BulbOutline } from '@vicons/ionicons5'
 
 import rock from '@/assets/rock.png'
@@ -14,17 +14,18 @@ const options = {
   SCISSORS: { image: scissors, value: 3 },
 }
 
-const emits = defineEmits(['decide'])
+const emits = defineEmits(['decide', 'update'])
 const props = defineProps({
   opponentId: String,
   opponentName: String,
   opponentChoice: String,
   opponentDecided: Boolean,
-  wait: Number,
+  waiting: Boolean,
+  count: Number,
 })
 
 const choice = ref('')
-const total = ref({ win: 0, draw: 0, lose: 0 })
+const score = ref({ win: 0, draw: 0, lose: 0 })
 
 const result = computed(() => {
   if (choice.value && props.opponentChoice) {
@@ -41,9 +42,10 @@ const capitalize = (str) => {
   return ''
 }
 
-const update = () => {
-  total.value[result.value]++
+const reset = () => {
+  score.value[result.value]++
   choice.value = ''
+  emits('update', score.value)
 }
 
 const decide = (option) => {
@@ -53,14 +55,14 @@ const decide = (option) => {
   }
 }
 
-defineExpose({ update })
+defineExpose({ reset })
 </script>
 
 <template>
   <n-space vertical :size="12" justify="center" align="center">
-    <div class="choice-field centered">
-      <n-icon v-if="!opponentDecided" size="120" :component="HourglassOutline" />
-      <n-icon v-if="opponentDecided && !opponentChoice" size="120" :component="BulbOutline" />
+    <div :class="{ 'choice-field': true, 'centered': true, waiting }">
+      <n-icon v-if="!opponentDecided" size="48" :component="HourglassOutline" />
+      <n-icon v-if="opponentDecided && !opponentChoice" size="48" :component="BulbOutline" />
       <img
         v-if="opponentDecided && opponentChoice"
         :src="options[opponentChoice].image"
@@ -68,19 +70,20 @@ defineExpose({ update })
       />
     </div>
     <div style="position: relative">
-      <strong class="self-centered">{{ capitalize(result) }}{{ wait ? ` (${wait})` : ' ' }}</strong>
+      <strong v-if="waiting" class="self-centered">Waiting</strong>
+      <strong v-if="!waiting" class="self-centered">{{ capitalize(result) }}{{ count ? ` (${count})` : ' ' }}</strong>
     </div>
-    <div class="choice-field centered">
-      <n-icon v-if="!choice" size="120" :component="HourglassOutline" />
-      <n-icon v-if="choice && !(opponentDecided && opponentChoice)" size="120" :component="BulbOutline" />
+    <div :class="{ 'choice-field': true, 'centered': true, waiting }">
+      <n-icon v-if="!choice" size="48" :component="HourglassOutline" />
+      <n-icon v-if="choice && !(opponentDecided && opponentChoice)" size="48" :component="BulbOutline" />
       <img
         v-if="choice"
         :src="options[choice].image"
-        :class="{ 'choice': true, blured: !(opponentDecided && opponentChoice) }"
+        :class="{ 'choice': true, blurred: !(opponentDecided && opponentChoice) }"
       />
     </div>
 
-    <n-space :size="16" justify="center" align="center">
+    <n-space :size="16" justify="center" align="center" :class="{ 'options-field': true, waiting }">
       <img
         v-for="(option, key) in options"
         draggable="false"
@@ -90,14 +93,29 @@ defineExpose({ update })
         :class="{ option: true, chosen: choice === key, pending: !choice }"
       />
     </n-space>
+
+    <n-space :size="12" :class="{ 'score-field': true, waiting }">
+      <n-tag :bordered="false" type="success">Win: {{ score.win }}</n-tag>
+      <n-tag :bordered="false" type="warning">Draw: {{ score.draw }}</n-tag>
+      <n-tag :bordered="false" type="error">Lose: {{ score.lose }}</n-tag>
+    </n-space>
   </n-space>
-  <pre>{{ JSON.stringify(total, null, 2) }}</pre>
 </template>
 
 <style scoped>
+.waiting {
+  filter: blur(10px);
+}
+
+.choice-field,
+.options-field,
+.score-field {
+  transition: filter 1s cubic-bezier(.4, 0, .2, 1);
+}
+
 .self-centered {
-  font-size: 2rem;
-  width: 240px;
+  font-size: 1.2rem;
+  width: 160px;
   text-align: center;
   position: absolute;
   top: 50%;
@@ -106,14 +124,14 @@ defineExpose({ update })
 }
 
 .choice-field {
-  width: 240px;
-  height: 240px;
+  width: 160px;
+  height: 160px;
   position: relative;
 }
 
 .choice {
-  width: 200px;
-  height: 200px;
+  width: 96px;
+  height: 96px;
   user-select: none;
   position: absolute;
 }
@@ -122,15 +140,16 @@ defineExpose({ update })
   transform: rotate(180deg);
 }
 
-.blured {
+.blurred {
   filter: blur(5px);
   opacity: .5;
 }
 
 .option {
-  width: 80px;
-  height: 80px;
-  background-color: rgba(255, 255, 255, .25);
+  padding: 8px;
+  width: 64px;
+  height: 64px;
+  background-color: rgba(200, 200, 200, .25);
   border: 4px solid rgba(255, 255, 255, .25);
   border-radius: 20px;
   cursor: not-allowed;
@@ -144,10 +163,6 @@ defineExpose({ update })
 
 .pending:hover {
   border-color: #36ad6a;
-}
-
-.pending:active {
-  border-color: #0c7a43;
 }
 
 .chosen {

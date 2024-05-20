@@ -1,7 +1,7 @@
 <script setup>
 import { Peer } from 'peerjs'
 import { onMounted, computed, ref, h } from 'vue'
-import { NButton, NIcon, NInput, NCollapseTransition, NSpace, useDialog, useMessage } from 'naive-ui'
+import { NButton, NIcon, NInput, NTag, NCollapseTransition, NSpace, useDialog, useMessage } from 'naive-ui'
 import { Copy } from '@vicons/ionicons5'
 import GamePlay from '@/components/GamePlay.vue'
 
@@ -9,6 +9,7 @@ const PEER_STATE = {
   UNAVAILABLE: 'UNAVAILABLE',
   READY: 'READY',
   PAIRING: 'PAIRING',
+  WAITING: 'WAITING',
   GAMING: 'GAMING',
   UNPAIRING: 'UNPAIRING',
 }
@@ -18,6 +19,7 @@ const MESSAGE_TYPE = {
   GAMING: 'GAMING',
   ACCEPTED: 'ACCEPTED',
   REJECTED: 'REJECTED',
+  ACKNOWLEDGED: 'ACKNOWLEDGED',
   UNPAIRED: 'UNPAIRED',
   GAMEPLAY: 'GAMEPLAY',
 }
@@ -27,6 +29,7 @@ const peerId = ref('')
 const peerName = ref('')
 const peerState = ref(PEER_STATE.UNAVAILABLE)
 const peerChoice = ref('')
+const peerScore = ref({ win: 0, draw: 0, lose: 0 })
 
 let opponent
 const opponentId = ref('')
@@ -36,8 +39,8 @@ const opponentChoice = ref('')
 const opponentDecided = ref(false)
 
 const gamePlayRef = ref(null)
-const wait = ref(0)
-const inGame = computed(() => peerState.value === PEER_STATE.GAMING || peerState.value === PEER_STATE.UNPAIRING)
+const count = ref(0)
+const inGame = computed(() => [PEER_STATE.WAITING, PEER_STATE.GAMING, PEER_STATE.UNPAIRING].includes(peerState.value))
 const dialog = useDialog()
 const message = useMessage()
 
@@ -48,6 +51,8 @@ const delay = (ms) => {
 }
 
 const initPeer = () => {
+  restorePeerName()
+
   peer = new Peer
 
   // connected to the peer server
@@ -73,25 +78,13 @@ const initPeer = () => {
     console.log('incoming connection established')
     dialog.warning({
       title: 'Invitation',
-      content: () => h('div', { innerHTML: `Player <strong>${conn.metadata.display}</strong> (${conn.peer}) wants to play a game with you.` }),
+      content: () => h('div', { innerHTML: `Player <strong>${conn.peer}</strong> (win: ${conn.metadata.win}, draw: ${conn.metadata.draw}, lose: ${conn.metadata.lose}) invites you for a game.` }),
       positiveText: 'Accept',
       negativeText: 'Reject',
       closable: false,
       maskClosable: false,
-      onPositiveClick: () => {
-        opponent = conn
-        opponentId.value = conn.peer
-        opponentName.value = conn.metadata.display
-        initOpponent('incoming')
-        sendMessageSafely(conn, { type: MESSAGE_TYPE.ACCEPTED })
-        peerState.value = PEER_STATE.GAMING
-      },
-      onNegativeClick: () => {
-        conn.on('close', () => {
-          console.log('incoming connection closed')
-        })
-        sendMessageSafely(conn, { type: MESSAGE_TYPE.REJECTED })
-      }
+      onPositiveClick: () => acceptInvitation(conn),
+      onNegativeClick: () => rejectInvitation(conn),
     })
   })
 
@@ -134,9 +127,13 @@ const initOpponent = (type) => {
 
   opponent.on('data', (data) => {
     switch (data.type) {
+      case MESSAGE_TYPE.ACKNOWLEDGED:
+        peerState.value = PEER_STATE.GAMING
+        break
       case MESSAGE_TYPE.ACCEPTED:
         opponentName.value = data.display
         peerState.value = PEER_STATE.GAMING
+        sendMessageSafely(opponent, { type: MESSAGE_TYPE.ACKNOWLEDGED })
         break
       case MESSAGE_TYPE.REJECTED:
         wastedGame('The player has rejected your invitation.')
@@ -167,6 +164,22 @@ const initOpponent = (type) => {
   })
 }
 
+const acceptInvitation = (conn) => {
+  opponent = conn
+  opponentId.value = conn.peer
+  opponentName.value = conn.metadata.display
+  initOpponent('incoming')
+  sendMessageSafely(conn, { type: MESSAGE_TYPE.ACCEPTED })
+  peerState.value = PEER_STATE.WAITING
+}
+
+const rejectInvitation = (conn) => {
+  conn.on('close', () => {
+    console.log('incoming connection closed')
+  })
+  sendMessageSafely(conn, { type: MESSAGE_TYPE.REJECTED })
+}
+
 const sendMessage = async (conn, data) => {
   const unusableTypes = [
     MESSAGE_TYPE.UNAVAILABLE,
@@ -189,6 +202,19 @@ const sendMessageSafely = (conn, data) => {
     conn.on('open', () => {
       sendMessage(conn, data)
     })
+  }
+}
+
+const restorePeerName = () => {
+  const previousName = localStorage.getItem('peerName')
+  if (previousName) {
+    peerName.value = previousName
+  }
+}
+
+const storePeerName = () => {
+  if (peerName.value) {
+    localStorage.setItem('peerName', peerName.value)
   }
 }
 
@@ -218,6 +244,12 @@ const startGame = () => {
     return
   }
 
+  if (opponentId.value === peerId.value) {
+    opponentIdStatus.value = 'error'
+    message.warning('You cannot play with yourself.')
+    return
+  }
+
   // close previous opponent connection
   if (opponent) {
     opponent.close()
@@ -227,7 +259,10 @@ const startGame = () => {
   peerState.value = PEER_STATE.PAIRING
   opponent = peer.connect(opponentId.value, {
     reliable: true,
-    metadata: { display: peerName.value || 'Nameless' }
+    metadata: {
+      display: peerName.value || 'Nameless',
+      ...peerScore.value
+    }
   })
 
   initOpponent('outcoming')
@@ -241,18 +276,19 @@ const endGame = () => {
 }
 
 const refresh = async (s) => {
-  wait.value = s
-  while (s--) {
+  for (let i = s; i > 0; i--) {
+    count.value = i
     await delay(1000)
-    wait.value = s
   }
-  gamePlayRef.value.update()
+  count.value = 0
+
+  gamePlayRef.value.reset()
   peerChoice.value = ''
   opponentChoice.value = ''
   opponentDecided.value = false
 }
 
-const decide = (choice, source) => {
+const decide = (choice) => {
   if (choice) {
     peerChoice.value = choice
     sendMessageSafely(opponent, {
@@ -261,6 +297,13 @@ const decide = (choice, source) => {
       choice: opponentDecided.value ? choice : ''
     })
   }
+}
+
+const update = (score) => {
+  const { win, draw, lose } = score
+  peerScore.value.win += win
+  peerScore.value.draw += draw
+  peerScore.value.lose += lose
 }
 
 const checkCompatibility = () => {
@@ -288,6 +331,7 @@ onMounted(checkCompatibility)
         <n-input
           v-model:value="peerName"
           :disabled="peerState !== PEER_STATE.READY"
+          @blur="storePeerName"
         />
       </div>
       <div>
@@ -320,43 +364,51 @@ onMounted(checkCompatibility)
     </n-space>
   </n-collapse-transition>
 
-  <n-space justify="space-between" align="center" class="bottom-gap">
-    <span v-if="peerState === PEER_STATE.GAMING">You are now playing with <strong>{{ opponentName }}</strong></span>
-    <span></span>
+  <n-space v-if="inGame" justify="space-between" align="center" class="bottom-gap">
+    <span>You are now playing with <strong>{{ opponentName }}</strong></span>
     <n-button
-      v-if="!inGame"
-      type="primary"
-      :loading="peerState === PEER_STATE.PAIRING"
-      :disabled="peerState === PEER_STATE.UNAVAILABLE || peerState === PEER_STATE.PAIRING"
-      @click="startGame"
-    >
-      Invite for a game
-    </n-button>
-    <n-button
-      v-if="inGame"
       type="primary"
       :loading="peerState === PEER_STATE.UNPAIRING"
       :disabled="peerState === PEER_STATE.UNPAIRING"
       @click="endGame"
     >
-      Quit current game
+      Quit
     </n-button>
   </n-space>
 
+  <n-space v-if="!inGame" justify="flex-end" align="center" class="bottom-gap">
+    <n-button
+      type="primary"
+      :loading="peerState === PEER_STATE.PAIRING"
+      :disabled="peerState === PEER_STATE.UNAVAILABLE || peerState === PEER_STATE.PAIRING"
+      @click="startGame"
+    >
+      Invite
+    </n-button>
+  </n-space>
+
+  <n-space v-if="!inGame" justify="space-around" align="center" :size="24" vertical>
+    <n-tag :bordered="false" size="large" type="success">Win: {{ peerScore.win }}</n-tag>
+    <n-tag :bordered="false" size="large" type="warning">Draw: {{ peerScore.draw }}</n-tag>
+    <n-tag :bordered="false" size="large" type="error">Lose: {{ peerScore.lose }}</n-tag>
+  </n-space>
+
   <game-play
-    v-if="peerState === PEER_STATE.GAMING"
+    v-if="peerState === PEER_STATE.WAITING || peerState === PEER_STATE.GAMING"
     ref="gamePlayRef"
+    :waiting="peerState === PEER_STATE.WAITING"
     :opponentId="opponentId"
     :opponentName="opponentName"
     :opponentChoice="opponentChoice"
     :opponentDecided="opponentDecided"
-    :wait="wait"
+    :count="count"
     @decide="decide"
+    @update="update"
   ></game-play>
 </template>
 
 <style scoped>
 .bottom-gap {
-  margin-bottom: 16px;
+  margin-bottom: 48px;
 }
 </style>
